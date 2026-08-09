@@ -1,0 +1,5 @@
+{
+  "name": "linux-screencast-skills",
+  "version": "0.1.0",
+  "description": "Author and produce narrated screencast tutorials for AI tooling and any developer workflow, on a Linux host. screencast-storyboard scripts a tutorial: it reads the real docs and drafts an approved storyboard (transcript + timeline). screencast-tutorial-video produces the video: it records each scene with the right engine (VHS terminal, ffmpeg still-motion for native apps, headless Playwright for the browser, command cards) and assembles an OpenAI voice-over, captioned 1920x1080 MP4. Trigger phrases: \"script a tutorial\", \"draft the transcript and timeline\", \"outline a screencast\", \"record the screencast\", \"produce the narrated MP4\", \"render the tutorial video\". Linux host, OpenAI voice-over."
+}

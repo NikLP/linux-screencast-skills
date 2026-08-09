@@ -1,0 +1,13 @@
+{
+  "name": "linux-screencast-skills",
+  "version": "0.1.0",
+  "description": "Author and produce narrated screencast tutorials for AI tooling and any developer workflow, on a Linux host. screencast-storyboard scripts a tutorial: it reads the real docs and drafts an approved storyboard (transcript + timeline). screencast-tutorial-video produces the video: it records each scene with the right engine (VHS terminal, ffmpeg still-motion for native apps, headless Playwright for the browser, command cards) and assembles an OpenAI voice-over, captioned 1920x1080 MP4. Works in Claude Code and OpenAI Codex.",
+  "keywords": ["codex", "screencast", "tutorial-video", "linux"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Linux Screencast Skills",
+    "shortDescription": "Script and produce narrated, captioned screencast tutorials for AI tooling on Linux",
+    "developerName": "Nik LePage",
+    "category": "Development"
+  }
+}

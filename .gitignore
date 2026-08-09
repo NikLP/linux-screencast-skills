@@ -1,0 +1,14 @@
+.DS_Store
+dist/
+node_modules/
+site/
+.beads/
+
+# Repo-local, opt-in installed tooling (scripts/install-{vhs,node,piper}.sh)
+.bin/
+.node/
+.piper/
+
+# Screencast build output
+.tutorial-build/
+skills/screencast-tutorial-video/.tutorial-build/
