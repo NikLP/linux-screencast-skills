@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # The browser "brain": launch a headed Chromium at a known position/size, then
 # locate elements and return their on-screen box. It never does the visible
-# clicking (Playwright's input is synthetic and invisible on camera); a
-# separate "hands" tool would move the real cursor and click (removed in this
-# fork along with the rest of macOS Method B, see repo root CLAUDE.md's
-# "Cursor capture" section for restoring one on Linux, e.g. via xdotool).
+# clicking (Playwright's input is synthetic and invisible on camera); the
+# separate "hands" tool that moves the real cursor and clicks is hands.sh
+# (xdotool), driven by browser-scene-cursor.mjs (Method B) - set TUT_KIOSK=1
+# when starting a session for that use, see repo root CLAUDE.md's "Cursor
+# capture" section.
 #
 #   ./browser.sh start "https://claude.ai"     # launch window at WIN_X,WIN_Y size WIN_W,WIN_H
 #   ./browser.sh open  "https://claude.ai/new" # navigate the running window

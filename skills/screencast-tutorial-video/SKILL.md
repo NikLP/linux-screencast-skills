@@ -19,19 +19,23 @@ container. One engine per surface:
 | Terminal (Claude Code / any CLI) | VHS `.tape` → MP4 | `render-tape.sh` |
 | Native app screenshot | ffmpeg `zoompan` + `drawbox` over a PNG still | `still-scene.sh` |
 | Browser (docs / UI tours) | Playwright records the page headless at 1080p (no OS capture, no permissions, records only the page) | `browser-scene.sh` |
+| Browser, real cursor (opt-in) | Kiosk Chromium on a virtual Xvfb display, xdotool moves/clicks/types, ffmpeg x11grab captures the screen live | `browser-scene-cursor.sh` |
 | Abstract command | command card (still) | `make-card.sh` |
 
-**Only one browser engine in this fork.** Upstream (`kanopi/screencast-skills`,
-macOS) also has a "Method B" that shows the real OS cursor clicking, built on
-macOS-only `cliclick` + `avfoundation`. It is **not available here** — not
-ported, not wired into the workflow. Use `browser-scene.sh` for everything;
-it draws a highlight box on whatever the narration is discussing instead of a
-cursor, which for docs/UI tours reads as clean, not as a compromise. (Method
-B's macOS-only files — `hands.sh`, `record-browser.sh`,
-`browser-scene-screencap.{sh,mjs}`, `references/capture-macos.md` — have been
-removed, they wouldn't run on Linux. `browser.sh`/`browser.mjs`, the
-OS-agnostic Playwright "brain," is kept as a head start for a future
-real-cursor port, see `CLAUDE.md`'s "Cursor capture" section.)
+**Two browser engines.** `browser-scene.sh` (Method A, the default) is
+headless, needs no extra host dependencies, and highlights whatever the
+narration is discussing with an in-page outline instead of a cursor — for
+most docs/UI tours that reads as clean, not as a compromise, so start here.
+`browser-scene-cursor.sh` (Method B) is the opt-in alternative for a scene
+that specifically needs a real, visibly-moving cursor: same `spec.json`
+format as Method A, swap the script name, nothing else changes. It needs
+`xdotool` + `Xvfb` (system packages, see Requirements below) and trades a
+little text crispness for the real cursor (no 2x supersampling — exact 1:1
+pixel mapping is what makes the on-screen coordinate math work). Ask which
+engine a `browser-action` scene should use if the storyboard doesn't already
+imply one; default to Method A when in doubt. See
+`references/browser-playwright.md` for the full trade-offs and
+`CLAUDE.md`'s "Cursor capture" section for the design.
 
 Each scene is padded to its narration, gets a caption bar, and concatenates into
 `final/tutorial.mp4`. Every scene is independently re-renderable, change one
@@ -52,6 +56,14 @@ installs anything itself. `./scripts/install-vhs.sh`,
 opt-in, repo-local installers (see the top-level README's Prerequisites
 table) — run them yourself, nothing here auto-installs.
 
+## Requirements (optional, `browser-scene-cursor.sh` / Method B only)
+
+- `xdotool` + `Xvfb` (system packages, like `ffmpeg`, not repo-local). Neither
+  is needed for anything else in this skill; `preflight.sh` reports their
+  state as a `WARN`, not a `MISS`, so their absence never blocks the main
+  pipeline. `browser-scene-cursor.sh` re-checks and dies with the same fix
+  command if you actually run it without them.
+
 ## Helper scripts
 
 Run every script with `export TUT_SLUG=<slug>` set, **from the directory that
@@ -70,6 +82,7 @@ the free/offline engine.
 | `render-tape.sh <NN> <tape>` | Render a VHS terminal scene → `scenes/NN.mp4` |
 | `still-scene.sh <NN> <png> [dur] [x:y:w:h]` | Ken Burns + highlight over a still → `scenes/NN.mp4` |
 | `browser-scene.sh <NN> <spec.json>\|<url> [s]` | Playwright records the page headless → `scenes/NN.mp4` |
+| `browser-scene-cursor.sh <NN> <spec.json>` | Real cursor (xdotool) on a kiosk Chromium, captured live with x11grab → `scenes/NN.mp4`. `... stop` tears down the session. |
 | `make-card.sh <NN> <seconds> <command-text>` | Render a command card → `scenes/NN.mp4` |
 | `narrate.sh voices` / `narrate.sh <NN> "<text>"` | List OpenAI voices / synthesize narration → `audio/NN.mp3` |
 | `finish-scene.sh <NN>` | Pad video to narration, add lead/tail silence, mux audio, draw caption bar |
@@ -129,9 +142,13 @@ Create a todo per step.
      `./still-scene.sh NN stills/NN.png <dur> [highlight]`.
    - `browser-action`: write a scene spec (URL + `steps`: scroll / highlight /
      wait, plus goto / click / type / submit for multi-page flows) and
-     `./browser-scene.sh NN <spec.json>`. It waits for fonts (no FOUT) and
-     records only the page. See `references/browser-playwright.md` for the
-     spec format.
+     `./browser-scene.sh NN <spec.json>` (default: headless, no cursor, no
+     extra deps). If the storyboard specifically calls for a real,
+     visibly-moving cursor, use `./browser-scene-cursor.sh NN <spec.json>`
+     instead — same spec, needs `xdotool`+`Xvfb`. Either way it waits for
+     fonts (no FOUT) and records only the page. See
+     `references/browser-playwright.md` for the spec format and the two
+     engines' trade-offs.
    - `command-card`: `./make-card.sh NN <seconds> "<command>"`.
    - `intro`/`outro`: usually a `desktop-still` or `command-card`.
 
@@ -165,7 +182,9 @@ Create a todo per step.
 8. **Concatenate and present.** `./concat.sh`, then show the user
    `.tutorial-build/<slug>/final/tutorial.mp4`. **Do not clean up.** On change
    requests, re-produce or re-finish only the affected scenes and re-run
-   `concat.sh`.
+   `concat.sh`. If any scene used `browser-scene-cursor.sh`, its Xvfb/Chromium
+   session is left running for fast re-recording; `./browser-scene-cursor.sh
+   stop` once the user is done reviewing, not before.
 
 ## Honesty rules (hard)
 
@@ -182,7 +201,7 @@ Create a todo per step.
 
 | Mistake | Fix |
 |---|---|
-| Asking for a real on-camera cursor | Not available in this fork (upstream's Method B is macOS-only, not ported). `browser-scene.sh` highlights instead. |
+| Asking for a real on-camera cursor | `browser-scene-cursor.sh` (Method B); needs `xdotool`+`Xvfb` (preflight's Method B section reports these). Default to `browser-scene.sh`'s highlight box unless the storyboard specifically calls for a moving cursor. |
 | A flash of unstyled text at a scene start | Method A waits for `document.fonts.ready` and trims the first ~1.5s; keep that lead-trim when assembling. |
 | Scenes landing in the wrong folder | Run from the build parent, or `export HDIR=<absolute>` so `.sh` and `.mjs` agree. |
 | Recording a live terminal | Terminal scenes are VHS `.tape` files, not screen captures. |
@@ -191,3 +210,4 @@ Create a todo per step.
 | Claiming the MP4 rendered when a step failed | Check the finish/concat logs; only report success when the file exists. |
 | Cleaning up before approval | Leave the build dir intact until the user is done. |
 | VHS output not 1920x1080 | `render-tape.sh` forces it; do not override Width/Height in the tape. |
+| Customizing `WIN_X`/`WIN_Y`/`WIN_W`/`WIN_H` for a `browser-scene-cursor.sh` scene | Don't, for this engine specifically — kiosk mode fullscreens to the Xvfb screen, which only matches the on-screen coordinate math when the window already covers it (i.e. left at the `TUT_RES` default). Method A's window geometry has no such constraint. |

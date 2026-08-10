@@ -16,14 +16,17 @@ The upstream also credits prior art: the
 
 - Runs on Linux instead of macOS (`preflight.sh` no longer hard-blocks on
   non-Darwin; the ffmpeg/Node/VHS pipeline was already OS-agnostic underneath).
-- The "real cursor visibly clicking" browser engine (Method B: macOS's
-  `cliclick` + `avfoundation`) is **not ported** and not available here. Only
-  the default, recommended engine is used: headless Playwright records the
-  page directly and draws a highlight box instead of a cursor. See
-  `skills/screencast-tutorial-video/SKILL.md` for the deferred-feature note,
-  and `CLAUDE.md`'s "Cursor capture" section for what a Linux port would
-  actually take (short version: yes, it's possible, on X11/Xvfb; native
-  Wayland capture is a materially bigger, separate undertaking).
+- The "real cursor visibly clicking" browser engine (upstream's macOS-only
+  Method B: `cliclick` + `avfoundation`) is **not ported as-is** — it's
+  rebuilt Linux-native instead: `browser-scene-cursor.sh`, opt-in, real
+  `xdotool` cursor movement on a virtual `Xvfb` display (X11, not native
+  Wayland — see `CLAUDE.md`'s "Cursor capture" section for why), captured
+  live with `ffmpeg -f x11grab`. The default, recommended engine is still
+  headless Playwright (`browser-scene.sh`), which draws a highlight box
+  instead of a cursor and needs no extra host dependencies; reach for
+  `browser-scene-cursor.sh` only when a scene specifically needs a real,
+  visibly-moving cursor. See `skills/screencast-tutorial-video/SKILL.md` and
+  `references/browser-playwright.md` for both engines.
 - OpenAI (or [Piper](https://github.com/OHF-voice/piper1-gpl) for free/offline)
   is the **default** TTS engine. ElevenLabs via `awaz` still works
   (`TUT_TTS=elevenlabs`, `ELEVENLABS_API_KEY`) for anyone who wants a
@@ -73,10 +76,14 @@ and assembles one MP4:
 | Terminal (Claude Code / any CLI) | **VHS** `.tape` → MP4, declarative typing, deterministic, re-renderable |
 | Native app screenshot | **ffmpeg `zoompan` + `drawbox`** motion over PNG stills |
 | Browser (claude.ai / dashboards) | **Playwright**, headless, records the page directly at 1080p; highlights elements instead of showing a cursor |
+| Browser, real cursor (opt-in) | **`xdotool` + `ffmpeg x11grab`** on a virtual `Xvfb` display, for a scene that specifically needs a visibly-moving cursor |
 | Abstract command | **command card** (still frame) |
 
-A real, visibly-clicking on-screen cursor for the browser engine (upstream's
-"Method B") is not available in this fork, see the Requirements note below.
+The real, visibly-clicking on-screen cursor engine (upstream's "Method B") is
+rebuilt Linux-native here (`browser-scene-cursor.sh`), not ported as-is from
+macOS — see the Requirements note below and `CLAUDE.md`'s "Cursor capture"
+section. It's opt-in: the default, headless Playwright engine needs no extra
+host dependencies and is the right choice for most docs/UI tours.
 
 Each scene gets narration (OpenAI, or [Piper](https://github.com/OHF-voice/piper1-gpl)
 for free/offline with no API key, `TUT_TTS=piper`), a bottom caption bar, and
@@ -93,13 +100,6 @@ for an unfinalized stub or a scene that ran suspiciously long. A valid-length
 Trigger phrases: "record the screencast from my storyboard", "produce the
 narrated MP4", "render the tutorial video with voice-over and captions".
 
-## Why this beats transcript → Google Vids avatar
-
-`screencast-storyboard` writes the transcript+timeline you already produce by
-hand (its output can still feed Google Vids). `screencast-tutorial-video` then
-shows the real tool, which an avatar reader can't. Terminal scenes are `.tape`
-files: perfect typing, no retakes, seconds to re-render.
-
 ## Prerequisites (production skill)
 
 `preflight.sh` only **checks** these and tells you the fix command; it never
@@ -108,8 +108,8 @@ installs anything on its own. The storyboard skill has no dependencies at all.
 Distro doesn't matter here, only CPU arch does: `vhs`/`ttyd`/Node all install
 as static/self-contained binaries keyed off `uname -m` (x86_64/arm64), not
 `apt`/`dnf`/`pacman`, so Ubuntu, Fedora, and Arch are equally supported. The
-one dependency that goes through the system package manager is `ffmpeg`
-itself.
+dependencies that go through the system package manager are `ffmpeg` itself,
+and (optional, real-cursor browser scenes only) `xdotool` + `Xvfb`.
 
 | Dependency | Why | Install |
 |---|---|---|
@@ -117,6 +117,15 @@ itself.
 | `vhs` (and its own dependency `ttyd`) | Renders terminal scenes from `.tape` files | `./scripts/install-vhs.sh` — downloads Charm's/tsl0922's static Linux binaries into `.bin/` inside this repo, no `sudo`, nothing installed system-wide |
 | Node.js + npm | Runs the browser engine | `./scripts/install-node.sh` — downloads the official nodejs.org tarball into `.node/` inside this repo. (Debian/Ubuntu's `npm` package pulls in ~300 transitive packages plus a native build toolchain; this sidesteps that entirely.) |
 | Playwright + Chromium | Headless browser recording | `npm install` (local, `node_modules/` inside this repo) then `npx playwright install chromium` (downloads into Playwright's own `~/.cache/ms-playwright`, its standard location) |
+
+**Optional, `browser-scene-cursor.sh` (real-cursor browser scenes) only** —
+nothing else needs these, and their absence never blocks the rest of the
+pipeline:
+
+| Dependency | Why | Install |
+|---|---|---|
+| `xdotool` | Moves/clicks/types with a real, visible cursor | Your distro's package manager (`apt`/`dnf`/`pacman`/`apk`) |
+| `Xvfb` | Virtual X11 display so `xdotool`/`ffmpeg x11grab` work regardless of whether the real desktop is X11, Wayland, or headless | Your distro's package manager |
 
 Narration (`narrate.sh`) needs **one** of these; everything else works without either:
 
@@ -128,6 +137,19 @@ Narration (`narrate.sh`) needs **one** of these; everything else works without e
 Nothing here writes outside this repo except Playwright's own Chromium cache.
 `rm -rf` on this directory (optionally plus `npx playwright uninstall`) removes
 everything.
+
+**Not every installer above verifies what it downloads.** `install-node.sh`
+checksums its download against nodejs.org's own `SHASUMS256.txt`, and
+`npm install`/Playwright's Chromium download go through npm's own lockfile
+integrity checks. `install-vhs.sh` does neither — it fetches whichever
+release GitHub currently reports as "latest" for `charmbracelet/vhs` and
+`tsl0922/ttyd` over HTTPS with no checksum or signature check, and re-running
+it tracks "latest" rather than a pinned version, so it isn't reproducible
+either. `install-piper.sh`'s voice-model download from Hugging Face has the
+same gap. None of this needs `sudo`, so it can't touch anything outside your
+own account, but that was never the real trust boundary — a compromised
+download already has everything your user account has (SSH keys, browser
+cookies, etc.) without needing root. Known gap, not fixed here.
 
 ## Repo tooling
 

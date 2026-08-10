@@ -1,9 +1,11 @@
 # Browser scenes
 
 A `browser-action` scene shows a web UI (claude.ai, a dashboard, a docs site).
-**Method A** (Playwright, headless) is the only engine wired up in this fork,
-use it for everything. See the end of this file if you're building a
-real-cursor "Method B".
+**Method A** (Playwright, headless) is the default, use it unless a scene
+specifically needs a real, visibly-moving cursor. **Method B** (real cursor,
+`browser-scene-cursor.sh`) is the opt-in alternative, see the end of this
+file. Both engines share the exact same `spec.json` format — write the spec
+once, run it under either.
 
 ---
 
@@ -103,26 +105,82 @@ Playwright locator strings: `"text=New chat"`, `"#prompt"`,
 
 ## Gotchas
 
-- **Logins / secrets:** log in before recording (profile persists in
-  `chrome-profile/`), or use a scene that needs no credentials. Never type a real
-  password on camera.
+- **Logins / secrets:** Method A launches a fresh, non-persistent browser
+  context per scene, nothing carries over between calls. Method B's session
+  does persist login state in `chrome-profile/` across scenes (see below) —
+  log in once before recording there, or use a scene that needs no
+  credentials. Either way, never type a real password on camera: whatever a
+  scene navigates to and types is exactly as exposed as any other browser
+  session, regardless of which engine recorded it.
 
 ---
 
-## Real-cursor capture ("Method B"), not implemented
+## Method B: real cursor (`browser-scene-cursor.sh`)
 
-Upstream's macOS-only real-cursor engine (`cliclick` + `avfoundation`) was
-never ported here, and its macOS-specific files (`hands.sh`,
-`record-browser.sh`, `browser-scene-screencap.{sh,mjs}`,
-`references/capture-macos.md`) have been removed. What survives:
-`browser.sh`/`browser.mjs`, the Playwright "brain" that launches a headed
-Chromium at a fixed position/size and returns an element's on-screen box
-(`browser.sh box "text=New chat"`, `browser.sh snapshot` to dump the a11y
-tree) without doing any visible clicking itself, already OS-agnostic.
+A real, visibly-moving OS cursor: `xdotool` moves/clicks/types on a kiosk
+Chromium running on a virtual `Xvfb` display, `ffmpeg -f x11grab` records the
+screen live, cropped to the window region. Ported from
+`drupal-tutorial-video`'s working `xdotool`/`x11grab` implementation (see the
+repo root `CLAUDE.md`'s "Cursor capture" section for the full design and why
+`Xvfb`, not native Wayland).
 
-A Linux port needs new "hands" (move/click/type, e.g. `xdotool`) and
-"capture" (e.g. `ffmpeg -f x11grab`, cropped to the browser window region)
-scripts in place of the deleted macOS ones. See the repo root `CLAUDE.md`'s
-"Cursor capture" section for the full plan, it's a restore from
-`drupal-tutorial-video`'s existing `xdotool`/`x11grab` implementation, not a
-from-scratch design.
+```bash
+./browser-scene-cursor.sh 030 specs/030.json     # same spec.json as Method A
+./browser-scene-cursor.sh stop                   # tear down when fully done
+```
+
+**Same spec format as Method A** (see above) — that's the point, a spec can
+run under either engine unchanged, with two differences in how this engine
+executes it:
+
+- `click`, `type`, and `typeJs` become real, on-screen actions: a real cursor
+  moves to the element (via Playwright's `boundingBox()`, not a hand-measured
+  coordinate — this engine still uses Method A's precondition, it just adds a
+  real click/type on top instead of a synthetic one), clicks, and — for
+  `type`/`typeJs` — clears the field with a real `Ctrl+A`+`Backspace` before
+  typing with real keystrokes. `typeJs` behaves identically to `type` here:
+  Method A only needed two typing step kinds because Playwright's synthetic
+  keystrokes can get swallowed by a live-rerendering field (a stale locator
+  handle); `xdotool` types into whatever has real OS keyboard focus, which
+  isn't tied to a locator handle, so that failure mode doesn't apply.
+- Everything else (`scroll*`, `highlight*`, `waitMs`, `goto`, `press`,
+  `submit`) runs exactly like Method A, no cursor involved either way.
+
+**Extra host deps, checked but never installed:** `xdotool` + `Xvfb` (system
+packages, like `ffmpeg`). `preflight.sh`'s Method B section reports these as
+optional `WARN`s, never blocking; `browser-scene-cursor.sh` re-checks and
+dies with the install command if you actually run it without them.
+
+**Trade-offs vs Method A:**
+
+- A little less crisp text: Method A supersamples at `deviceScaleFactor: 2`
+  and downscales; Method B needs exact 1:1 pixel mapping (kiosk mode,
+  `--force-device-scale-factor=1`) so a Playwright bounding box converts
+  straight to an `xdotool` screen coordinate with no chrome-height
+  calibration guess.
+- Real click/type precision, not DOM precision: a real `Ctrl+A` in a
+  non-text-input element (a contenteditable region that didn't actually
+  focus, say) can select more than intended, the same way it would for an
+  actual person. Method A's `fill()`/`typeJs` are DOM-exact regardless of
+  what's focused.
+- Session state persists across scenes: the kiosk Chromium and its
+  `chrome-profile/` (so logins survive) stay up between
+  `browser-scene-cursor.sh` calls for fast re-recording, unlike Method A's
+  fresh headless browser per call. Log in once, `stop` only when fully done.
+- **Don't customize `WIN_X`/`WIN_Y`/`WIN_W`/`WIN_H`** for this engine — kiosk
+  mode fullscreens to the `Xvfb` screen's own size, which only matches the
+  coordinate math when the window already covers the whole virtual screen
+  (true at the `TUT_RES` default, WIN_* left unset). Method A's window
+  geometry has no such constraint.
+- **The `Xvfb` display has no authentication and no process isolation.**
+  Method A's headless recording never opens a real display at all, so none of
+  this applies to it. Method B's `xvfb.sh` starts `Xvfb` with `-ac` (X11
+  access control off), so any other process running as your own user account
+  can point `DISPLAY=$XVFB_DISPLAY` at it and read the framebuffer or inject
+  its own input, no prompt. And unlike `drupal-tutorial-video` (this engine's
+  reference), which ran the equivalent of `Xvfb`+`xdotool`+Chromium inside a
+  disposable ddev/Docker container, this port runs them directly on the host
+  — a deliberate trade for not requiring Docker as a dependency, not an
+  oversight, but it means nothing here contains a compromise of that
+  Chromium process the way a container would. See CLAUDE.md's "Known
+  security trade-offs" section for the full reasoning.

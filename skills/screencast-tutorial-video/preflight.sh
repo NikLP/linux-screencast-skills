@@ -12,18 +12,7 @@ info() { echo "  ..   $*"; }
 warn() { echo "  WARN $*"; }
 MISSING=0
 need() { echo "  MISS $*"; MISSING=1; }
-
-# Package-manager-specific install command for a system dependency, so a MISS
-# line always tells you exactly what to run instead of a generic name.
-pkg_install_hint() {  # pkg_install_hint <pkg>
-  local pkg="$1"
-  if command -v apt-get >/dev/null; then echo "sudo apt-get install -y $pkg"
-  elif command -v dnf >/dev/null; then echo "sudo dnf install -y $pkg"
-  elif command -v pacman >/dev/null; then echo "sudo pacman -S $pkg"
-  elif command -v apk >/dev/null; then echo "sudo apk add $pkg"
-  else echo "install '$pkg' with your distro's package manager"
-  fi
-}
+# pkg_install_hint() comes from lib.sh, shared with xvfb.sh/browser-scene-cursor.sh.
 
 echo "== screencast-tutorial-video preflight (slug: $TUT_SLUG) =="
 
@@ -118,10 +107,37 @@ if [ -d "$PIPER_SITE_DIR" ]; then
   else
     warn "Piper installed but no voice model downloaded: ./scripts/install-piper.sh"
   fi
-else
+elif command -v python3 >/dev/null && python3 -m pip --version >/dev/null 2>&1; then
   warn "Piper not installed (free, offline, no API key): ./scripts/install-piper.sh"
+else
+  # install-piper.sh itself needs python3's pip module (Debian/Ubuntu splits
+  # this into a separate package, not guaranteed present on a minimal
+  # install); check it here so the fix command is the real blocker, not a
+  # script that will fail partway through with a confusing pip error.
+  warn "Piper not installed, and its own prerequisite is missing too: python3's pip module. $(pkg_install_hint python3-pip), then: ./scripts/install-piper.sh"
 fi
 [ "$TTS_OK" = 1 ] || warn "No TTS engine ready yet (OpenAI or Piper). Narration (narrate.sh) will fail until one is; every other scene type still works."
+
+# 6. Method B (real-cursor browser-action scenes: browser-scene-cursor.sh),
+#    entirely optional. Method A (browser-scene.sh) is the default and needs
+#    none of this, so a missing dependency here is a WARN, never a MISS - it
+#    must not block the main pipeline. browser-scene-cursor.sh re-checks these
+#    itself and dies with the same hint if you actually run it without them.
+if command -v xdotool >/dev/null; then
+  ok "Method B: xdotool present ($(command -v xdotool))"
+else
+  warn "Method B (real-cursor browser scenes): xdotool missing, optional: $(pkg_install_hint xdotool)"
+fi
+if command -v Xvfb >/dev/null; then
+  ok "Method B: Xvfb present ($(command -v Xvfb))"
+else
+  warn "Method B (real-cursor browser scenes): Xvfb missing, optional: $(pkg_install_hint xvfb)"
+fi
+if (command -v "$FFMPEG" >/dev/null 2>&1 || [ -x "$FFMPEG" ]) && "$FFMPEG" -hide_banner -devices 2>/dev/null | grep -w x11grab >/dev/null 2>&1; then
+  ok "Method B: ffmpeg has the x11grab device"
+else
+  warn "Method B (real-cursor browser scenes): this ffmpeg build has no x11grab device, optional: $(pkg_install_hint ffmpeg)"
+fi
 
 echo "== preflight complete =="
 if [ "$MISSING" = 1 ]; then

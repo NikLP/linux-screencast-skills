@@ -48,6 +48,15 @@ WIN_Y="${TUT_WIN_Y:-0}"
 WIN_W="${TUT_WIN_W:-1920}"
 WIN_H="${TUT_WIN_H:-1080}"
 
+# Method B (real-cursor browser scenes: xvfb.sh/hands.sh/browser-scene-cursor.sh)
+# only. A virtual X11 display, so xdotool (input) and ffmpeg x11grab (capture)
+# have an X server to talk to regardless of whether the real desktop is X11,
+# Wayland, or headless/CI - see CLAUDE.md's "Cursor capture" section for why.
+# CDP_PORT is the debugging port the persistent kiosk Chromium listens on.
+# Method A (browser-scene.sh) is fully headless/off-screen and uses neither.
+XVFB_DISPLAY="${TUT_XVFB_DISPLAY:-:99}"
+CDP_PORT="${TUT_CDP_PORT:-9222}"
+
 # Build directory: single host path (no container mount anymore). An exported
 # HDIR wins, so wrappers can pass an absolute path to both the .sh scripts and
 # browser-scene.mjs (they must agree, or scenes land in the wrong dir).
@@ -125,3 +134,17 @@ cduration() {
 }
 
 die() { echo "error: $*" >&2; exit 1; }
+
+# Package-manager-specific install command for a system dependency (ffmpeg,
+# and Method B's xdotool/xvfb), so a MISS/die line always tells you exactly
+# what to run instead of a generic name. Shared by preflight.sh, xvfb.sh, and
+# browser-scene-cursor.sh.
+pkg_install_hint() {  # pkg_install_hint <pkg>
+  local pkg="$1"
+  if command -v apt-get >/dev/null; then echo "sudo apt-get install -y $pkg"
+  elif command -v dnf >/dev/null; then echo "sudo dnf install -y $pkg"
+  elif command -v pacman >/dev/null; then echo "sudo pacman -S $pkg"
+  elif command -v apk >/dev/null; then echo "sudo apk add $pkg"
+  else echo "install '$pkg' with your distro's package manager"
+  fi
+}

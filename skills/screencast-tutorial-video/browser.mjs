@@ -5,9 +5,9 @@
 // disconnects, so the window survives between browser.sh calls (open -> box ->
 // wait -> ...). Playwright input is NOT used to click on camera, `box` returns
 // the element's viewport-center coordinates for a separate "hands" tool (real
-// cursor move + click) to consume. This mirrors the sibling skill's
-// agent-browser/xdotool split; the macOS "hands" (cliclick) has been removed
-// from this fork, see repo root CLAUDE.md's "Cursor capture" section.
+// cursor move + click) to consume - that's hands.sh (xdotool), driven by
+// browser-scene-cursor.mjs, this fork's Method B. See repo root CLAUDE.md's
+// "Cursor capture" section for the full design.
 
 import { spawn } from 'node:child_process';
 import { mkdirSync, existsSync } from 'node:fs';
@@ -65,13 +65,33 @@ switch (cmd) {
       `--window-position=${WIN.x},${WIN.y}`,
       `--window-size=${WIN.w},${WIN.h}`,
       '--force-device-scale-factor=1',
+      // Force the X11 backend. On a Wayland host, Chromium's Ozone
+      // auto-detection sees $WAYLAND_DISPLAY and connects straight to the
+      // real compositor, ignoring $DISPLAY entirely - the window then
+      // renders on the real desktop even when $DISPLAY points at Method B's
+      // isolated Xvfb (this is how a kiosk window ended up visible on a real
+      // Wayland screen instead of :99). xdotool/x11grab are X11-only, so the
+      // "hands" coordinate math needs Chromium on that same backend anyway.
+      '--ozone-platform=x11',
       '--no-first-run',
       '--no-default-browser-check',
       '--disable-infobars',
       '--disable-features=Translate',
       '--hide-crash-restore-bubble',
-      url,
     ];
+    // TUT_KIOSK=1 (browser-scene-cursor.sh, Method B): strips the tab strip
+    // and omnibox so the page viewport exactly fills the window with zero
+    // browser chrome. That's what lets a Playwright boundingBox() convert
+    // straight to xdotool screen coordinates (screen = WIN.x/y + viewport
+    // offset) with no chrome-height calibration guess. Off by default: this
+    // "brain" is also meant for a developer driving it interactively
+    // (box/snapshot/fill), which is more usable with a normal omnibox.
+    if (process.env.TUT_KIOSK === '1') flags.push('--kiosk');
+    // Chromium refuses to start as root without this (common in containers/CI
+    // running as root). Off by default since it weakens the sandbox; opt in
+    // only if you hit "Running as root without --no-sandbox is not supported".
+    if (process.env.TUT_CHROMIUM_NO_SANDBOX === '1') flags.push('--no-sandbox');
+    flags.push(url);
     const child = spawn(exe, flags, { detached: true, stdio: 'ignore' });
     child.unref();
     // Wait for CDP to answer.

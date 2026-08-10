@@ -5,7 +5,7 @@ the `skills/` directory, the number of `### N.` entries below should equal
 the number of skill directories. Append the next number rather than
 inserting mid-list.
 
-### 1. screencast-storyboard
+## 1. screencast-storyboard
 
 Author a tutorial script from a goal. Reads the tool's real docs, install
 command, and config JSON, then drafts an approved `storyboard.md` (scenes with
@@ -15,7 +15,7 @@ commands. Dependency-free; the output can also feed a human presenter or another
 tool. Triggers: "script a tutorial", "draft the transcript and timeline",
 "outline a screencast walkthrough".
 
-### 2. screencast-tutorial-video
+## 2. screencast-tutorial-video
 
 Produce a narrated, captioned 1920x1080 MP4 from an approved storyboard on the
 Linux host. Records each scene with the right engine, VHS for terminals,

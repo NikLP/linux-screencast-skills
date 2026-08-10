@@ -60,8 +60,10 @@ click, the command, the screen). The moment a sentence starts describing the
   - `desktop-still`, a native-app screen (e.g. Claude Desktop → Settings →
     MCP). Name the screen and what to zoom/highlight; production animates a PNG.
   - `browser-action`, a real step in a web UI. Name the URL, the element to
-    click, and any text to type. Production locates the element and moves a
-    visible cursor to it.
+    click, and any text to type. Production locates the element and, by
+    default, highlights it in-page; note here if the scene specifically
+    needs a real, visibly-moving cursor instead (production's opt-in engine
+    for that).
   - `command-card`, a single command shown as a still card. Put the exact
     command in `actions`.
 - **actions**, the single concrete action for this scene (a `browser-action`
