@@ -256,6 +256,82 @@ extending Method B or the installer scripts.
   checksumming `install-vhs.sh` if either upstream repo publishes release
   checksums; not done here, known gap, not a verified-safe state.
 
+## Method B: lessons from a real recording session (2026-08-10)
+
+Recorded producing a 6-scene Drupal admin tutorial end to end
+(`annotations-editorial-recipe` in a separate project). All four items below
+were real, observed failures, not theoretical — each cost a re-record before
+the cause was found.
+
+- **"Pre cruft": the first beat of every clip can show the *previous* scene's
+  page, not this scene's.** `browser-scene-cursor.sh` starts `x11grab`
+  capturing immediately, then `browser-scene-cursor.mjs` still has to boot
+  Node, `require('playwright')`, and `connectOverCDP` before it ever calls
+  `page.goto(spec.url)` — a real, observed 1-2s gap during which whatever the
+  persistent kiosk session was last showing (the prior scene's end state, or
+  leftover manual `browser.sh open`/`box` testing) is what's on screen and
+  gets recorded. It reads as a jarring flash to the wrong page, not a
+  cosmetic FOUT (Method A's font-ready wait doesn't apply here; this is a
+  real prior page, not unstyled markup). **Workaround, not a script fix:**
+  before invoking `browser-scene-cursor.sh <NN> <spec>`, first run
+  `DISPLAY=$XVFB_DISPLAY browser.sh open '<the spec's own url>'` and a short
+  `sleep 1`. This makes the stale content already *correct* for the scene
+  about to record, so `browser-scene-cursor.mjs`'s own `goto` becomes a
+  harmless same-page reload instead of a visible wrong-content flash. Doing
+  this by hand before every single scene is real, repeated overhead; the
+  actual fix belongs in `browser-scene-cursor.sh` itself (pre-navigate to
+  `spec.url` — or at minimum `about:blank` — right after confirming/starting
+  the session and before starting `x11grab`), not yet done here.
+- **`role=link[name="..."]` can silently match zero elements even when the
+  text is right there and `text=`/a CSS selector finds it instantly.**
+  Hit on a Drupal local-action button ("+ Add annotation type", Gin theme):
+  `role=link[name="Add annotation type"]` timed out after the full 30s
+  (`locator.waitFor` gives no hint *why* it found nothing), while
+  `text=Add annotation type` and `a.button--action` both resolved
+  immediately. Cause: the element likely carries an explicit `role="button"`
+  that overrides its implicit `<a>` link role, so Playwright's role engine
+  (correctly, per ARIA) excludes it from `role=link` queries. The lesson
+  isn't "avoid role= locators", it's: **a 30s role= timeout with plausible-
+  looking text is not proof the text is wrong** — verify the actual
+  candidate locator against the live, already-authenticated session with
+  `DISPLAY=$XVFB_DISPLAY browser.sh box '<locator>'` (returns center
+  coordinates on a hit, throws the same `waitFor` timeout on a miss) *before*
+  writing it into a spec and burning a full recording pass on it. This
+  verify-live step is what actually caught every locator issue below too.
+- **`#edit-submit` is not reliably the visible primary action on Drupal
+  content-entity forms with Gin's revision sidebar.** Worked fine on plain
+  `ConfigFormBase`/`EntityForm` admin forms (target-type toggles, field
+  scoping), but on a `ContentEntityForm` with Gin's moderation sidebar
+  active, `#edit-submit` resolved to a near-zero-size element in the
+  top-left corner, not the actual green "Save" button Gin renders top-right
+  — `role=button[name="Save"]` hit the real one. Root cause not fully
+  chased (likely a visually-hidden/relocated duplicate for Gin's responsive
+  sticky-actions layout), but the practical rule: **don't assume `#edit-
+  submit` is the right target on a revisionable content-entity form; verify
+  with `browser.sh box` and cross-check against an actual screenshot**
+  (`page.screenshot()` over the CDP connection, or `still-scene.sh`-style
+  capture) before trusting the coordinates, same as the point above.
+- **`xdotool type`/`key` (Method B's real-keystroke path) hard-fails on
+  multi-byte UTF-8 it can't encode as an X11 keysym sequence** — an em dash
+  (`—`) produced `Invalid multi-byte sequence encountered` /
+  `xdo_enter_text_window reported an error` and aborted mid-string, having
+  already typed everything up to that character. `typeJs` is **not** a
+  workaround for this on Method B: per the header comment in
+  `browser-scene-cursor.mjs`, it's accepted as a plain alias of `type` here
+  (unlike Method A, where the two kinds exist for a different reason —
+  stale-locator swallowing on a live-rerendering field — Method B types into
+  real OS keyboard focus, so that failure mode doesn't apply and there was
+  never a second, JS-based typing path to fall back to). **Consequence worse
+  than the failed keystrokes alone:** per-step failures are caught and
+  logged (`step failed: ...`) but execution *continues to the next step* —
+  if a `click` on a Save/Submit button follows the failed `type` in the same
+  spec, it still fires, silently persisting the truncated text as if it were
+  complete. Always verify saved state after any `type` step with non-ASCII
+  punctuation (read it back from wherever the tool under test stores it, not
+  just "the step didn't error"), and prefer plain ASCII punctuation (a comma
+  instead of an em dash, `--` instead of `—`) in typed text for Method B
+  scenes to avoid the failure entirely.
+
 ## Known future extensions, not yet built
 
 - **Pre-seed for reactive UI.** For a scene whose point is showing the
@@ -268,6 +344,14 @@ extending Method B or the installer scripts.
   `preSeed` block in the browser-scene spec format, run once before `steps`.
   Proposed 2026-08-09, not implemented, build only once a real storyboard
   needs it.
+- **`browser-scene-cursor.sh` should pre-navigate before `x11grab` starts.**
+  Would close the "pre cruft" gap documented above at the source instead of
+  requiring every caller to manually `browser.sh open <url>` + `sleep 1`
+  before each `browser-scene-cursor.sh` call. Concretely: move (or add) a
+  `page.goto(spec.url)` in `browser-scene-cursor.mjs` — or the simpler
+  `browser.sh open about:blank` — to run *before* `browser-scene-cursor.sh`
+  backgrounds the `ffmpeg -f x11grab` capture, not after. Proposed
+  2026-08-10 from a real recording session, not implemented.
 
 ## Build directory (shared by both skills)
 
