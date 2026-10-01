@@ -53,7 +53,7 @@ line, re-run one script, re-concat. No timeline editing.
 `preflight.sh` **checks** all of this and reports the real state; it never
 installs anything itself. `./scripts/install-vhs.sh`,
 `./scripts/install-node.sh`, and `./scripts/install-piper.sh` are separate,
-opt-in, repo-local installers (see the top-level README's Prerequisites
+opt-in, repo-local installers (see the top-level README's Requirements
 table) — run them yourself, nothing here auto-installs.
 
 ## Requirements (optional, `browser-scene-cursor.sh` / Method B only)

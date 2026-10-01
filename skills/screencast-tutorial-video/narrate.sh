@@ -18,7 +18,7 @@
 #   OpenAI:     OPENAI_API_KEY, POST /v1/audio/speech (model gpt-4o-mini-tts).
 #   Piper:      free, offline, no account/key. Noticeably less natural than the
 #               other two, but zero cost and no credits needed. See
-#               ./scripts/install-piper.sh and README.md's Prerequisites table.
+#               ./scripts/install-piper.sh and README.md's Requirements table.
 # Voice: TUT_VOICE (engine-specific id/name/model). OpenAI model:
 # TUT_OPENAI_TTS_MODEL.
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

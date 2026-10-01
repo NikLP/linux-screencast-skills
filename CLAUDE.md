@@ -1,39 +1,28 @@
 # Claude Context for linux-screencast-skills
 
 Two skills that produce narrated screencast tutorials of real AI tooling:
-`screencast-storyboard` (authoring: read real docs → approved storyboard) and
-`screencast-tutorial-video` (production: record scenes → captioned, voice-over
-MP4). Linux host (any distro/desktop), OpenAI voice-over.
+`screencast-storyboard` (read real docs -> approved storyboard) and
+`screencast-tutorial-video` (record scenes -> captioned, voice-over MP4).
+Linux host, any distro/desktop. `README.md` is the user-facing doc (quickstart,
+requirements, fork differences); this file is for working on the code.
 
-This is a Linux-only fork of [`kanopi/screencast-skills`](https://github.com/kanopi/screencast-skills)
-(macOS, ElevenLabs), itself built from the Kanopi skills-plugin-template. See
-`README.md` for the full list of what changed. The macOS-only "Method B"
-real-cursor browser engine (`cliclick` + `avfoundation`) was never wired up
-here, and its macOS-specific files (`hands.sh`, `record-browser.sh`,
-`browser-scene-screencap.{sh,mjs}`, `references/capture-macos.md`) were
-removed, they wouldn't have run on Linux anyway. `browser.sh`/`browser.mjs`
-(the Playwright "brain" that locates elements) was kept, OS-agnostic, and is
-now the shared foundation both browser engines build on: Method A
-(`browser-scene.sh`, headless, no cursor, the default) and the Linux-native
-Method B built on 2026-08-10 (`browser-scene-cursor.sh` + `hands.sh` +
-`xvfb.sh`, real cursor via `xdotool`/`x11grab`), see "Cursor capture" below.
+## Lineage
 
-**Lineage runs one level deeper than the macOS fork.** The removed `hands.sh`
-and `record-browser.sh` carried their own header comments saying they were
-"ported from `drupal-tutorial-video`'s `xdotool`/`x11grab`" version, a
-sibling Linux/ddev project (a design doc for it exists at
-`docs/superpowers/specs/2026-07-22-drupal-tutorial-video-design.md` in that
-project). So the real sequence is: a working Linux (`xdotool` + `x11grab`)
-Method B existed first in `drupal-tutorial-video` → it was ported to macOS
-(`cliclick` + `avfoundation`) for `kanopi/screencast-skills` → this repo
-forked back to Linux, built the Playwright-only Method A first, and later
-restored a Linux-native Method B (`browser-scene-cursor.sh`) — a port from
-`drupal-tutorial-video`'s working implementation, not a from-scratch design,
-same as `browser-scene.mjs`/`finish-scene.sh`/`concat.sh` before it. See
-"Cursor capture" below for what carried over unchanged and what didn't (this
-repo has no ddev container, so the container-exec boundary and its
-workarounds are gone; `browser.sh`/`browser.mjs`'s persistent-CDP-session
-design replaces `drupal-tutorial-video`'s `agent-browser` CLI).
+`drupal-tutorial-video` (Linux, `xdotool`/`x11grab`, ddev) -> ported to macOS
+(`cliclick`/`avfoundation`) as `kanopi/screencast-skills` -> forked back to
+Linux here. The macOS-only files (`record-browser.sh`,
+`browser-scene-screencap.{sh,mjs}`, `references/capture-macos.md`) were removed.
+`browser.sh`/`browser.mjs` (the Playwright "brain" that locates elements) was
+kept and is the shared base of both browser engines:
+
+- **Method A**, `browser-scene.sh`: headless, no cursor, the default.
+- **Method B**, `browser-scene-cursor.sh` + `hands.sh` + `xvfb.sh` (built
+  2026-08-10): real cursor via `xdotool`/`x11grab`. A port of
+  `drupal-tutorial-video`'s working implementation, not a fresh design, minus
+  the ddev container boundary and its workarounds. See "Cursor capture".
+
+`finish-scene.sh`, `concat.sh` and `browser-scene.mjs` trace back to
+`drupal-tutorial-video` the same way.
 
 ## Invariants
 
@@ -86,10 +75,12 @@ trace back to `drupal-tutorial-video` via upstream. Captions and command-card
 text use fontconfig generic family names (`font=Sans`/`Monospace`), not a
 bundled font file, so nothing is downloaded.
 
-**Dependencies are repo-local, never system-wide.** `vhs`/`ttyd` live in
-`.bin/`, Node/npm in `.node/`, Playwright in `node_modules/`, all via opt-in
-`scripts/install-*.sh` you run yourself. `preflight.sh` only checks, it never
-installs. See the README's Prerequisites table.
+**Dependencies are repo-local where possible.** `vhs`/`ttyd` in `.bin/`,
+Node/npm in `.node/`, Piper in `.piper/`, Playwright in `node_modules/`, all via
+opt-in `scripts/install-*.sh` the user runs. `ffmpeg`, `jq`, `xdotool`, `Xvfb`
+are system packages; Chromium is in Playwright's own cache. `preflight.sh` only
+checks, never installs. The full table is in `README.md` (Requirements); keep it
+in sync with `preflight.sh` when a dependency changes.
 
 **Browser `type`/`typeJs` clear the field first, unconditionally.** A field
 can already hold a value (page default, state carried from an earlier step
@@ -108,16 +99,12 @@ cases in one run), and neither file existence nor duration catches it. Where
 the tool being demoed exposes a way to read the result back, prefer that over
 eyeballing the recording.
 
-**ElevenLabs (`awaz`) still exists, opt-in, behind `TUT_TTS=elevenlabs`.**
-Not the fork's default (OpenAI/Piper are), but it's a real, working code path
-for anyone who wants a cloned/premium voice, so it isn't dead code to strip.
-`awaz`'s own CLI has changed shape
-since this was last written against it, current usage per
-<https://github.com/ahmadawais/awaz> is `awaz "text" -v <voice> -o <file>` (no
-`speak` subcommand, no `--no-play`/`--no-stream`/`--voice-id`); `narrate.sh`
-was updated to match on 2026-08-09 but this was verified against the GitHub
-README, not a live run (`awaz`/`npx` aren't installed in this environment),
-re-check `awaz --help` before trusting it on a fresh install.
+**ElevenLabs (`awaz`) is opt-in via `TUT_TTS=elevenlabs`**, not the default
+(OpenAI/Piper are), but it is a real code path, not dead code. Note that
+`narrate.sh` auto-picks ElevenLabs first if `ELEVENLABS_API_KEY` is set, then
+OpenAI, then Piper. `awaz`'s CLI changed (now `awaz "text" -v <voice> -o <file>`,
+no `speak` subcommand); `narrate.sh` was updated 2026-08-09 against the GitHub
+README only, not a live run. Re-check `awaz --help` before trusting it.
 
 ## Cursor capture (Method B, built 2026-08-10)
 
@@ -206,9 +193,7 @@ extending Method B or the installer scripts.
   own user account. Any local process that points `DISPLAY=$XVFB_DISPLAY`
   (`:99` by default, predictable) at it can read the framebuffer or inject
   its own mouse/keyboard input, no permission prompt, no consent dialog.
-  This is the same weakness X11 has always had (see Marcus's own rationale
-  for using it, quoted in the lineage discussion this section came from: a
-  real Wayland compositor withholds framebuffer access specifically to
+  This is the same weakness X11 has always had (a real Wayland compositor withholds framebuffer access specifically to
   prevent this), just relocated from your real desktop to this virtual one.
   The blast radius is smaller — only this recording, not your whole session
   — not zero. Don't read "it's an isolated display" as "nothing on it can be
@@ -223,14 +208,14 @@ extending Method B or the installer scripts.
   on camera" rule (`references/browser-playwright.md`'s Gotchas) is the
   actual safeguard here, the display's isolation doesn't substitute for it.
 - **No container/process boundary, unlike the `drupal-tutorial-video`
-  precursor.** Marcus's original ran the equivalent of `Xvfb`/`xdotool`/
+  precursor.** The original ran the equivalent of `Xvfb`/`xdotool`/
   Chromium inside a ddev (Docker) container — if anything on that display
   were ever compromised (a malicious page achieving a Chromium sandbox
   escape, for instance, rare but real), the blast radius stopped at the
   container. This port runs them directly under the host user's own
   account instead, trading that isolation for not requiring Docker/ddev as
   a dependency (a much heavier ask for this repo's actual audience than
-  `sudo apt install xdotool xvfb`, see README.md's Prerequisites framing).
+  `sudo apt install xdotool xvfb`, see README.md's Requirements section).
   Considered trade, not an oversight — but a host-level compromise of
   anything on that display isn't contained the way it was in the original.
   Note also that Docker itself isn't a security freebie to fall back on
@@ -239,22 +224,14 @@ extending Method B or the installer scripts.
   (`bubblewrap`/`firejail`) around just the Method B process trio would
   recover some of the original's isolation without reintroducing a full
   Docker dependency; not built, evaluate if this ever needs hardening.
-- **Two of the four opt-in installer scripts don't verify what they
-  download.** `scripts/install-node.sh` checksums its download against
-  nodejs.org's own `SHASUMS256.txt`, and `npm install`/Playwright's Chromium
-  download go through npm's own lockfile integrity checks — both fine.
-  `scripts/install-vhs.sh` does neither: it fetches whatever GitHub
-  currently reports as "latest release" for `charmbracelet/vhs` and
-  `tsl0922/ttyd` over HTTPS with no checksum or signature check, and
-  re-running it tracks "latest" rather than a pinned version, so it isn't
-  even reproducible. `scripts/install-piper.sh`'s voice-model download
-  (`.onnx`/`.onnx.json` from Hugging Face) has the same gap. None of this
-  needs `sudo`, which limits it to the invoking user's own privileges, not
-  system-wide — but "no sudo" was never the actual trust boundary; a
-  compromised binary already has everything your user account has (SSH
-  keys, browser cookies, etc.) without needing root. Worth pinning +
-  checksumming `install-vhs.sh` if either upstream repo publishes release
-  checksums; not done here, known gap, not a verified-safe state.
+- **Two of the four opt-in installer scripts don't verify downloads.**
+  `install-node.sh` checks nodejs.org's `SHASUMS256.txt`; `npm install` and
+  Playwright use lockfile integrity. `install-vhs.sh` fetches GitHub's "latest"
+  `charmbracelet/vhs` and `tsl0922/ttyd` with no checksum (not reproducible),
+  and `install-piper.sh`'s Hugging Face voice download is the same. No `sudo`,
+  but "no sudo" was never the trust boundary: a bad binary already has your
+  user's SSH keys and cookies. Pin and checksum `install-vhs.sh` if upstream
+  publishes checksums. Known gap, not fixed.
 
 ## Method B: lessons from a real recording session (2026-08-10)
 
@@ -381,5 +358,5 @@ width has to be uniform across a build, which it is.
 1. Create `skills/<name>/SKILL.md` (`name` + `description` frontmatter with
    trigger phrases).
 2. Append the next `### N.` entry to `skills/README.md`.
-3. Add a `CHANGELOG.md` entry.
+3. Add a `CHANGELOG.md` entry (the file doesn't exist yet; create it).
 4. Run `./scripts/validate-frontmatter.sh` and `./scripts/check-codex-parity.sh`.
